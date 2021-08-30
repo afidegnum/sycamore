@@ -59,6 +59,16 @@ pub struct DomNode {
 }
 
 impl DomNode {
+    /// Create a new [`DomNode`] wrapping a [`Node`].
+    #[inline]
+    pub fn new(node: Node) -> Self {
+        Self {
+            id: Default::default(),
+            node,
+        }
+    }
+
+    /// Gets the underlying [`Node`].
     pub fn inner_element(&self) -> Node {
         self.node.clone()
     }
@@ -137,26 +147,17 @@ impl GenericNode for DomNode {
             .unwrap()
             .dyn_into()
             .unwrap();
-        DomNode {
-            id: Default::default(),
-            node,
-        }
+        Self::new(node)
     }
 
     fn text_node(text: &str) -> Self {
         let node = document().create_text_node(text).into();
-        DomNode {
-            id: Default::default(),
-            node,
-        }
+        Self::new(node)
     }
 
     fn marker() -> Self {
         let node = document().create_comment("").into();
-        DomNode {
-            id: Default::default(),
-            node,
-        }
+        Self::new(node)
     }
 
     fn set_attribute(&self, name: &str, value: &str) {
@@ -179,10 +180,7 @@ impl GenericNode for DomNode {
     }
 
     fn first_child(&self) -> Option<Self> {
-        self.node.first_child().map(|node| Self {
-            id: Default::default(),
-            node,
-        })
+        self.node.first_child().map(Self::new)
     }
 
     fn insert_child_before(&self, new_node: &Self, reference_node: Option<&Self>) {
@@ -207,17 +205,11 @@ impl GenericNode for DomNode {
     }
 
     fn parent_node(&self) -> Option<Self> {
-        self.node.parent_node().map(|node| Self {
-            id: Default::default(),
-            node,
-        })
+        self.node.parent_node().map(Self::new)
     }
 
     fn next_sibling(&self) -> Option<Self> {
-        self.node.next_sibling().map(|node| Self {
-            id: Default::default(),
-            node,
-        })
+        self.node.next_sibling().map(Self::new)
     }
 
     fn remove_self(&self) {
@@ -244,10 +236,8 @@ impl GenericNode for DomNode {
     }
 
     fn clone_node(&self) -> Self {
-        Self {
-            node: self.node.clone_node_with_deep(true).unwrap(),
-            id: Default::default(),
-        }
+        let node = self.node.clone_node_with_deep(true).unwrap();
+        Self::new(node)
     }
 }
 
@@ -268,81 +258,7 @@ pub fn render(template: impl FnOnce() -> Template<DomNode>) {
 /// _This API requires the following crate features to be activated: `dom`_
 pub fn render_to(template: impl FnOnce() -> Template<DomNode>, parent: &Node) {
     let scope = create_root(|| {
-        insert(
-            &DomNode {
-                id: Default::default(),
-                node: parent.clone(),
-            },
-            template(),
-            None,
-            None,
-            false,
-        );
-    });
-
-    thread_local! {
-        static GLOBAL_SCOPES: std::cell::RefCell<Vec<ReactiveScope>> = std::cell::RefCell::new(Vec::new());
-    }
-
-    GLOBAL_SCOPES.with(|global_scopes| global_scopes.borrow_mut().push(scope));
-}
-
-/// Render a [`Template`] under a `parent` node by reusing existing nodes (client side
-/// hydration). Alias for [`hydrate_to`] with `parent` being the `<body>` tag.
-///
-/// For rendering without hydration, use [`render`] instead.
-///
-/// **TODO**: This method currently deletes existing nodes from DOM and reinserts new
-/// created nodes. This will be fixed in a later release.
-///
-/// _This API requires the following crate features to be activated: `dom`_
-pub fn hydrate(template: impl FnOnce() -> Template<DomNode>) {
-    let window = web_sys::window().unwrap();
-    let document = window.document().unwrap();
-
-    hydrate_to(template, &document.body().unwrap());
-}
-
-/// Gets the children of an [`Element`] by collecting them into a [`Vec`]. Note that the returned
-/// value is **NOT** live.
-fn get_children(parent: &Element) -> Vec<Element> {
-    let children = parent.children();
-    let children_count = children.length();
-
-    let mut vec = Vec::with_capacity(children_count as usize);
-
-    for i in 0..children.length() {
-        vec.push(children.get_with_index(i).unwrap());
-    }
-
-    vec
-}
-
-/// Render a [`Template`] under a `parent` node by reusing existing nodes (client side
-/// hydration). For rendering under the `<body>` tag, use [`hydrate_to`] instead.
-///
-/// For rendering without hydration, use [`render`] instead.
-///
-/// **TODO**: This method currently deletes existing nodes from DOM and reinserts new
-/// created nodes. This will be fixed in a later release.
-///
-/// _This API requires the following crate features to be activated: `dom`_
-pub fn hydrate_to(template: impl FnOnce() -> Template<DomNode>, parent: &Node) {
-    for child in get_children(parent.unchecked_ref()) {
-        child.remove();
-    }
-
-    let scope = create_root(|| {
-        insert(
-            &DomNode {
-                id: Default::default(),
-                node: parent.clone(),
-            },
-            template(),
-            None,
-            None, // TODO
-            false,
-        );
+        insert(&DomNode::new(parent.clone()), template(), None, None, false);
     });
 
     thread_local! {
